@@ -6,8 +6,10 @@ import sqlalchemy
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.orm import Session
 from sqlalchemy import create_engine, func
+from sqlalchemy.sql import text
 from dateutil.relativedelta import relativedelta
 import pandas as pd
+from collections import OrderedDict
 
 from flask import Flask, jsonify
 
@@ -35,6 +37,24 @@ session = Session(engine)
 #################################################
 app = Flask(__name__)
 
+def get_one_year_prior_dt():
+    # Find the most recent date in the data set.
+    most_recent_date_row = session.query(measurement.date).order_by(measurement.date.desc()).first()
+
+    # Extract the date from the row (tuple)
+    most_recent_date = most_recent_date_row[0]  # This gets the first element of the tuple
+
+    # Ensure that most_recent_date is a date object
+    most_recent_date_dt = pd.to_datetime(most_recent_date)
+
+    # Calculate the date one year from the last date in data set.
+    one_year_prior = most_recent_date_dt - relativedelta(months=12)
+
+    # Convert one_year_prior to a standard date object
+    one_year_prior_dt = one_year_prior.date()  # Convert to Python datetime
+
+    return one_year_prior_dt
+
 @app.route("/")
 def welcome():
     """List all available api routes."""
@@ -53,22 +73,8 @@ def welcome():
 def precipitation():
     # Query all precipitation
 
-    # Find the most recent date in the data set.
-    most_recent_date_row = session.query(measurement.date).order_by(measurement.date.desc()).first()
-
-# Extract the date from the row (tuple)
-    most_recent_date = most_recent_date_row[0]  # This gets the first element of the tuple
-
-# Ensure that most_recent_date is a datetime object
-    most_recent_date = pd.to_datetime(most_recent_date)
-
-# Calculate the date one year from the last date in data set.
-    one_year_prior = most_recent_date - relativedelta(months=12)
-
-# Convert one_year_prior to a standard datetime object
-    one_year_prior = one_year_prior.date()  # Convert to Python datetime
-
-    precipitation_results = session.query(measurement.date, measurement.prcp).filter(measurement.date >= one_year_prior).order_by(measurement.date).all()
+    one_year_prior_dt = get_one_year_prior_dt()
+    precipitation_results = session.query(measurement.date, measurement.prcp).filter(measurement.date >= one_year_prior_dt).order_by(measurement.date).all()
 
     # Create a dictionary from the row data and append to a list of all_precipitation
     all_precipitation = []
@@ -83,15 +89,17 @@ def precipitation():
 def stations():
 
 # List the stations and their counts in descending order.
-    active_stations = session.query(measurement.station, func.count(measurement.station)).\
-        group_by(measurement.station).\
-        order_by(func.count(measurement.station).desc()).all()
+    # active_stations = session.query(measurement.station, func.count(measurement.station)).\
+    #     group_by(measurement.station).\
+    #     order_by(func.count(measurement.station).desc()).all()
 
+    active_stations = session.execute(text("SELECT m.station, s.name, COUNT(m.station) FROM measurement AS m JOIN station AS s ON s.station = m.station GROUP BY m.station ORDER BY COUNT(m.station) DESC")).fetchall()
 # Query all stations into a list
     all_stations = []
-    for active_station, count in active_stations:
-        station_dict = {}
+    for active_station, station_name, count  in active_stations:
+        station_dict = OrderedDict()
         station_dict["station"] = active_station
+        station_dict["name"] = station_name
         station_dict["count"] = count
         all_stations.append(station_dict)
 # Return a JSON list of stations from the dataset.
@@ -100,20 +108,7 @@ def stations():
 @app.route("/api/v1.0/tobs")
 def temperature():
    
-   # Find the most recent date in the data set.
-    most_recent_date_row = session.query(measurement.date).order_by(measurement.date.desc()).first()
-
-    # Extract the date from the row (tuple)
-    most_recent_date = most_recent_date_row[0]  # This gets the first element of the tuple
-
-    # Ensure that most_recent_date is a datetime object
-    most_recent_date = pd.to_datetime(most_recent_date)
-
-    # Calculate the date one year from the last date in data set.
-    one_year_prior = most_recent_date - relativedelta(months=12)
-
-    # Convert one_year_prior to a standard datetime object
-    one_year_prior = one_year_prior.date()  # Convert to Python datetime
+    one_year_prior_dt = get_one_year_prior_dt()
 
    # Look for the most active station id from the previous query
     most_active_station = session.query(measurement.station, func.count(measurement.station)).\
@@ -122,7 +117,7 @@ def temperature():
     print(most_active_station[0])
 
     # Query the dates and temperature observations of the most-active station for the previous year of data.
-    result_most_active_station = session.query(measurement.date, measurement.tobs).filter(measurement.date >= one_year_prior).filter(measurement.station == most_active_station[0]).order_by(measurement.date).all()
+    result_most_active_station = session.query(measurement.date, measurement.tobs).filter(measurement.date >= one_year_prior_dt).filter(measurement.station == most_active_station[0]).order_by(measurement.date).all()
     
     # Collect temperature observations in a list
     all_temperature = []
