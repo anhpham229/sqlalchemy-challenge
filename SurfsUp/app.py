@@ -43,8 +43,8 @@ def welcome():
         f"/api/v1.0/precipitation<br/>"
         f"/api/v1.0/stations<br/>"
         f"/api/v1.0/tobs<br/>"
-        f"/api/v1.0/2016-08-23<br/>"
-        f"/api/v1.0/2016-08-23/2017-08-23<br/>"
+        f"/api/v1.0/<start><br/>"
+        f"/api/v1.0/<start>/<end><br/>"
     )
 #################################################
 # Flask Routes
@@ -135,10 +135,10 @@ def temperature():
     # Return a JSON list of temperature observations for the previous year.
     return jsonify(all_temperature)
 
-@app.route("/api/v1.0/2016-08-23")
-def start_date(2016-08-23):
+@app.route("/api/v1.0/<start>")
+def start_date(start):
     # Convert the start date from string to datetime
-    start_date = pd.to_datetime(2016-08-23).date()
+    start_date = pd.to_datetime(start).date()
 
     # Query data starting from a given start date
     start_results = session.query(
@@ -158,12 +158,12 @@ def start_date(2016-08-23):
     # Return a JSON list of the minimum temperature, the average temperature, and the maximum temperature for a specified start date.
     return jsonify(start_dict)
 
-@app.route("/api/v1.0/2016-08-23/2017-08-23")
-def start_end():
+@app.route("/api/v1.0/<start>/<end>")
+def start_end(start, end):
    
 # Convert the start date and end date from string to datetime
-    start_date = pd.to_datetime(2016-08-23).date()
-    end_date = pd.to_datetime(2017-08-23).date()
+    start_date = pd.to_datetime(start).date()
+    end_date = pd.to_datetime(end).date()
 
    # Query data from a given start date to an end date
     start_end_results = session.query(measurement.date, func.min(measurement.tobs), func.avg(measurement.tobs), func.max(measurement.tobs)).\
@@ -173,9 +173,9 @@ def start_end():
     start_end_dict = {
         "Start Date": start_date,
         "End Date": end_date,
-        "TMIN": start_end_results[0][0],
-        "TAVG": start_end_results[0][1],
-        "TMAX": start_end_results[0][2]
+        "TMIN": start_end_results[0][1],
+        "TAVG": start_end_results[0][2],
+        "TMAX": start_end_results[0][3]
     }
     # Return a JSON list of the minimum temperature, the average temperature, and the maximum temperature for a specified start-end range.
     return jsonify(start_end_dict)
